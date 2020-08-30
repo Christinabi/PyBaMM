@@ -51,6 +51,34 @@ class TestUnaryOperators(unittest.TestCase):
             np.diag(signb.evaluate().toarray()), [-1, -1, 0, 1, 1]
         )
 
+    def test_floor(self):
+        a = pybamm.Symbol("a")
+        floora = pybamm.Floor(a)
+        self.assertEqual(floora.name, "floor")
+        self.assertEqual(floora.children[0].name, a.name)
+
+        b = pybamm.Scalar(3.5)
+        floorb = pybamm.Floor(b)
+        self.assertEqual(floorb.evaluate(), 3)
+
+        c = pybamm.Scalar(-3.2)
+        floorc = pybamm.Floor(c)
+        self.assertEqual(floorc.evaluate(), -4)
+
+    def test_ceiling(self):
+        a = pybamm.Symbol("a")
+        ceila = pybamm.Ceiling(a)
+        self.assertEqual(ceila.name, "ceil")
+        self.assertEqual(ceila.children[0].name, a.name)
+
+        b = pybamm.Scalar(3.5)
+        ceilb = pybamm.Ceiling(b)
+        self.assertEqual(ceilb.evaluate(), 4)
+
+        c = pybamm.Scalar(-3.2)
+        ceilc = pybamm.Ceiling(c)
+        self.assertEqual(ceilc.evaluate(), -3)
+
     def test_gradient(self):
         # gradient of scalar symbol should fail
         a = pybamm.Symbol("a")
@@ -256,6 +284,12 @@ class TestUnaryOperators(unittest.TestCase):
         # sign
         self.assertEqual((pybamm.sign(a)).diff(a).evaluate(y=y), 0)
 
+        # floor
+        self.assertEqual((pybamm.Floor(a)).diff(a).evaluate(y=y), 0)
+
+        # ceil
+        self.assertEqual((pybamm.Ceiling(a)).diff(a).evaluate(y=y), 0)
+
         # spatial operator (not implemented)
         spatial_a = pybamm.SpatialOperator("name", a)
         with self.assertRaises(NotImplementedError):
@@ -397,6 +431,10 @@ class TestUnaryOperators(unittest.TestCase):
             pybamm.x_average(symbol_on_edges)
 
         # Particle domains
+        geo = pybamm.GeometricParameters()
+        l_n = geo.l_n
+        l_p = geo.l_p
+
         a = pybamm.Symbol(
             "a",
             domain="negative particle",
@@ -406,7 +444,7 @@ class TestUnaryOperators(unittest.TestCase):
         self.assertEqual(a.domain, ["negative particle"])
         self.assertIsInstance(av_a, pybamm.Division)
         self.assertIsInstance(av_a.children[0], pybamm.Integral)
-        self.assertEqual(av_a.children[1].id, pybamm.geometric_parameters.l_n.id)
+        self.assertEqual(av_a.children[1].id, l_n.id)
 
         a = pybamm.Symbol(
             "a",
@@ -417,7 +455,7 @@ class TestUnaryOperators(unittest.TestCase):
         self.assertEqual(a.domain, ["positive particle"])
         self.assertIsInstance(av_a, pybamm.Division)
         self.assertIsInstance(av_a.children[0], pybamm.Integral)
-        self.assertEqual(av_a.children[1].id, pybamm.geometric_parameters.l_p.id)
+        self.assertEqual(av_a.children[1].id, l_p.id)
 
     def test_r_average(self):
         a = pybamm.Scalar(1)
@@ -438,6 +476,15 @@ class TestUnaryOperators(unittest.TestCase):
             self.assertEqual(av_a.children[0].integration_variable[0].domain, r.domain)
             # electrode domains go to current collector when averaged
             self.assertEqual(av_a.domain, [])
+
+        # r-average of a symbol that is broadcast to x
+        # takes the average of the child then broadcasts it
+        a = pybamm.Scalar(1, domain="positive particle")
+        broad_a = pybamm.SecondaryBroadcast(a, "positive electrode")
+        average_broad_a = pybamm.r_average(broad_a)
+        self.assertIsInstance(average_broad_a, pybamm.PrimaryBroadcast)
+        self.assertEqual(average_broad_a.domain, ["positive electrode"])
+        self.assertEqual(average_broad_a.children[0].id, pybamm.r_average(a).id)
 
         # r-average of symbol that evaluates on edges raises error
         symbol_on_edges = pybamm.PrimaryBroadcastToEdges(1, "domain")
